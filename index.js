@@ -12,8 +12,6 @@ const app = express();
 
 app.set('port', (process.env.PORT || 5000));
 
-
-
 app.use(express.static(__dirname + '/public'));
 
 // views is directory for all template files
@@ -22,25 +20,6 @@ app.set('view engine', 'ejs');
 
 app.get('/', function(request, response) {
   response.render('pages/index');
-});
-
-
-
-
-
-// parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({extended: false}));
-
-// parse application/json
-app.use(bodyParser.json());
-
-// for facebook verification
-app.get('/webhook/', function (req, res) {
-    if (req.query['hub.verify_token'] === verify_token) {
-        res.send(req.query['hub.challenge'])
-    } else {
-        res.send('Error, wrong token')
-    }
 });
 
 app.listen(app.get('port'), function() {
