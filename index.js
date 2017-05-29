@@ -12,71 +12,8 @@ const app = express();
 
 app.set('port', (process.env.PORT || 5000));
 
-// parse application/x-www-form-urlencoded
-app.use(bodyParser.urlencoded({extended: false}));
-
-// parse application/json
-app.use(bodyParser.json());
-
-// index
-app.get('/', function (req, res) {
-    res.send('hello world i am a secret bot')
-});
-
-// for facebook verification
-app.get('/webhook/', function (req, res) {
-    if (req.query['hub.verify_token'] === verify_token) {
-        res.send(req.query['hub.challenge'])
-    } else {
-        res.send('Error, wrong token')
-    }
-});
-
-// to post data
-app.post('/webhook/', function (req, res) {
-    var messaging_events = req.body.entry[0].messaging;
-    for (var i = 0; i < messaging_events.length; i++) {
-        var event = req.body.entry[0].messaging[i];
-        var sender = event.sender.id;
-        if (event.message && event.message.text) {
-            var text = event.message.text;
-            if (text === 'Generic'){
-                console.log("welcome to chatbot");
-                //sendGenericMessage(sender)
-                continue;
-            }
-            sendTextMessage(sender, "Text received, echo: " + text.substring(0, 200));
-        }
-        if (event.postback) {
-            text = JSON.stringify(event.postback);
-            sendTextMessage(sender, "Postback received: "+text.substring(0, 200), token);
-        }
-    }
-    res.sendStatus(200);
-});
-
-function sendTextMessage(sender, text) {
-    var messageData = { text:text };
-
-    request({
-        url: 'https://graph.facebook.com/v2.6/me/messages',
-        qs: {access_token:token},
-        method: 'POST',
-        json: {
-            recipient: {id:sender},
-            message: messageData
-        }
-    }, function(error, response, body) {
-        if (error) {
-            console.log('Error sending messages: ', error);
-        } else if (response.body.error) {
-            console.log('Error: ', response.body.error);
-        }
-    })
-}
 
 
-/*
 app.use(express.static(__dirname + '/public'));
 
 // views is directory for all template files
@@ -86,7 +23,25 @@ app.set('view engine', 'ejs');
 app.get('/', function(request, response) {
   response.render('pages/index');
 });
-*/
+
+
+
+
+
+// parse application/x-www-form-urlencoded
+app.use(bodyParser.urlencoded({extended: false}));
+
+// parse application/json
+app.use(bodyParser.json());
+
+// for facebook verification
+app.get('/webhook/', function (req, res) {
+    if (req.query['hub.verify_token'] === verify_token) {
+        res.send(req.query['hub.challenge'])
+    } else {
+        res.send('Error, wrong token')
+    }
+});
 
 app.listen(app.get('port'), function() {
   console.log('Node app is running on port', app.get('port'));
