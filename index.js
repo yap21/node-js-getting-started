@@ -1,169 +1,241 @@
-'use strict';
-
-const bodyParser = require('body-parser');
-const crypto = require('crypto');
-
-var express = require('express');
-var app = express();
-
-app.set('port', (process.env.PORT || 5000));
-
-app.use(express.static(__dirname + '/public'));
-
-// views is directory for all template files
-app.set('views', __dirname + '/views');
-app.set('view engine', 'ejs');
-app.use(bodyParser.json({ verify: verifyRequestSignature }));
-
-app.get('/', function(request, response) {
-    response.render('pages/index');
-});
-
-app.get('/webhook', function(req, res) {
-    if (req.query['hub.mode'] === 'subscribe' &&
-        req.query['hub.verify_token'] === 'boing') {
-        console.log("Validating webhook");
-        res.status(200).send(req.query['hub.challenge']);
-    } else {
-        console.error("Failed validation. Make sure the validation tokens match.");
-        res.sendStatus(403);
-    }
-});
-
-app.post('/webhook', function (req, res) {
-    console.log('----> POST Webhook');
-    if(req.body){
-        var data = req.body;
-        // Make sure this is a page subscription
-        if (data.object === 'page') {
-
-            // Iterate over each entry - there may be multiple if batched
-            data.entry.forEach(function(entry) {
-                var pageID = entry.id;
-                var timeOfEvent = entry.time;
-
-                // Iterate over each messaging event
-                entry.messaging.forEach(function(event) {
-                    if (event.message) {
-                        receivedMessage(event);
-                    } else {
-                        console.log("Webhook received unknown event: ", event);
-                    }
-                });
-            });
-
-            // Assume all went well.
-            //
-            // You must send back a 200, within 20 seconds, to let us know
-            // you've successfully received the callback. Otherwise, the request
-            // will time out and we will keep trying to resend.
-            res.sendStatus(200);
-        }
-    }
-});
-
-function receivedMessage(event) {
-    var senderID = event.sender.id;
-    var recipientID = event.recipient.id;
-    var timeOfMessage = event.timestamp;
-    var message = event.message;
-
-    console.log("Received message for user %d and page %d at %d with message:",
-        senderID, recipientID, timeOfMessage);
-    console.log(JSON.stringify(message));
-
-    var messageId = message.mid;
-
-    var messageText = message.text;
-    var messageAttachments = message.attachments;
-
-    if (messageText) {
-
-        // If we receive a text message, check to see if it matches a keyword
-        // and send back the example. Otherwise, just echo the text we received.
-        switch (messageText) {
-            case 'generic':
-                sendGenericMessage(senderID);
-                break;
-
-            default:
-                sendTextMessage(senderID, messageText);
-        }
-    } else if (messageAttachments) {
-        sendTextMessage(senderID, "Message with attachment received");
-    }
-}
-
-function sendGenericMessage(recipientId, messageText) {
-    // To be expanded in later sections
-}
-
-function sendTextMessage(recipientId, messageText) {
-    var messageData = {
-        recipient: {
-            id: recipientId
-        },
-        message: {
-            text: messageText
-        }
-    };
-
-    callSendAPI(messageData);
-}
-
-/*
- * Verify that the callback came from Facebook. Using the App Secret from
- * the App Dashboard, we can verify the signature that is sent with each
- * callback in the x-hub-signature field, located in the header.
- *
- * https://developers.facebook.com/docs/graph-api/webhooks#setup
- *
+/**
+ * heroku 가이드 : https://devcenter.heroku.com/categories/nodejs-support
+ * 
+ * 로컬실행 : heroku local web (http://localhost:5000)
+ * 
+ * heroku서버 실행:
+ * 1. git add .
+ * 2. git commit -m "메세지"
+ * 3. git push keroku master
+ * 4. heroku open
+ * 
+ * 로그 확인 : heroku logs --tail
  */
-function verifyRequestSignature(req, res, buf) {
-    var signature = req.headers["x-hub-signature"];
+var app = require('http').createServer(handler);
+var io = require('socket.io')(app);
+var fs = require('fs');
 
-    if (!signature) {
-        // For testing, let's log an error. In production, you should throw an
-        // error.
-        console.error("Couldn't validate the signature.");
-    } else {
-        var elements = signature.split('=');
-        var method = elements[0];
-        var signatureHash = elements[1];
+app.listen(process.env.PORT || 5000);
 
-        var expectedHash = crypto.createHmac('sha1', 'd5768f1da0c3ebc6b1fb286b7523caff')
-            .update(buf)
-            .digest('hex');
-
-        if (signatureHash != expectedHash) {
-            throw new Error("Couldn't validate the request signature.");
+function handler(req, res) {
+    fs.readFile(__dirname + '/public/client.html', function(err, data) {
+        if (err) {
+            res.writeHead(500);
+            return res.end('Error loading client.html');
         }
-    }
-}
 
-function callSendAPI(messageData) {
-    request({
-        uri: 'https://graph.facebook.com/v2.6/me/messages',
-        qs: { access_token: 'EAAGWH5Hh7IMBAFriaEGIwqdcE1fv3I1bAh0nmjttF5DzY2Mu63x8azC1rSEZAo2keDIqQ5uB5vX90bJ8HKA1Asrvg3sk8RoOeHZB2JmZAwByYkJJLzvSpxwtGZBRQN4ThsCvEab2sJfj4TZAaDQK5CAgDWh2hoUjJPFldbZCFgbgZDZD' },
-        method: 'POST',
-        json: messageData
-
-    }, function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-            var recipientId = body.recipient_id;
-            var messageId = body.message_id;
-
-            console.log("Successfully sent generic message with id %s to recipient %s",
-                messageId, recipientId);
-        } else {
-            console.error("Unable to send message.");
-            console.error(response);
-            console.error(error);
-        }
+        res.writeHead(200);
+        res.end(data);
     });
 }
 
-app.listen(app.get('port'), function() {
-    console.log('Node app is running on port', app.get('port'));
+
+function getRandomColor() {
+    let letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; ++i) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+
+class InputData {
+    constructor(num) {
+        this.num = num;
+        this.w = false;
+        this.s = false;
+        this.a = false;
+        this.d = false;
+    }
+}
+
+class Ball {
+    constructor(socket) {
+        this.socket = socket;
+        this.x = 0;
+        this.y = 0;
+        this.color = getRandomColor();
+        this.inputMap = {};
+        this.inputBuffer = [];
+        this.lastInputNum = 0;
+    }
+    
+    get id() {
+        return this.socket.id;
+    }
+    
+    checkKey(key) {
+        return this.inputMap[key];
+    }
+    
+    pushInput(inputData) {
+        this.inputBuffer.push(inputData);
+    }
+    
+    applyInputs() {
+        let left = this.inputBuffer.length;
+        
+        while (left > 0) {
+            left -= 1;
+            let input = this.inputBuffer.shift();
+            
+            if (input.num > this.lastInputNum) {
+                this.lastInputNum = input.num;
+                
+                this.inputMap.w = input.w;
+                this.inputMap.s = input.s;
+                this.inputMap.a = input.a;
+                this.inputMap.d = input.d;
+            }
+        }
+    }
+    
+    handleInput(timeRate) {
+        let vx = 0;
+        let vy = 0;
+        
+        if (this.checkKey('w')) {
+            vy = -4;
+        }
+        if (this.checkKey('s')) {
+            vy = 4;
+        }
+        if (this.checkKey('a')) {
+            vx = -4;
+        }
+        if (this.checkKey('d')) {
+            vx = 4;
+        }
+        
+        this.x += vx * timeRate;
+        this.y += vy * timeRate;
+    }
+}
+
+
+var balls = [];
+var ballMap = {};
+
+
+function joinGame(socket) {
+    let ball = new Ball(socket);
+    
+    balls.push(ball);
+    ballMap[socket.id] = ball;
+    
+    return ball;
+}
+
+function leaveGame(socket) {
+    for (let i = 0; i < balls.length; ++i) {
+        if (balls[i].id == socket.id) {
+            balls.splice(i, 1);
+            break;
+        }
+    }
+    
+    delete ballMap[socket.id];
+}
+
+function onInput(socket, data) {
+    let ball = ballMap[socket.id];
+    
+    let inputData = new InputData(data.num);
+    inputData.w = data.w || false;
+    inputData.s = data.s || false;
+    inputData.a = data.a || false;
+    inputData.d = data.d || false;
+    
+    ball.pushInput(inputData);
+}
+
+
+io.on('connection', function(socket) {
+    console.log(`${socket.id} has joined!`);
+    
+    socket.on('disconnect', function(reason) {
+        console.log(`${socket.id} has leaved! (${reason})`);
+        
+        leaveGame(socket);
+        
+        socket.broadcast.emit('leave_user', socket.id);
+    });
+    
+    socket.on('input', function(data) {
+        onInput(socket, data);
+    });
+    
+    
+    let newBall = joinGame(socket);
+    
+    socket.emit('user_id', socket.id);
+    
+    // Send data of users already in game.
+    for (let i = 0; i < balls.length; ++i) {
+        let ball = balls[i];
+        
+        socket.emit('join_user', {
+            id: ball.id,
+            x: ball.x,
+            y: ball.y,
+            color: ball.color,
+        });
+    }
+    
+    // Send data of a new user.
+    socket.broadcast.emit('join_user', {
+        id: socket.id,
+        x: newBall.x,
+        y: newBall.y,
+        color: newBall.color,
+    });
 });
+
+
+var prevUpdateTime = new Date().getTime();
+var stateNum = 0;
+
+function updateGame() {
+    let currentUpdateTime = new Date().getTime();
+    let deltaTime = currentUpdateTime - prevUpdateTime;
+    prevUpdateTime = currentUpdateTime;
+    
+    let timeRate = deltaTime / (1000 / 60);
+    
+    for (let i = 0; i < balls.length; ++i) {
+        let ball = balls[i];
+        
+        ball.applyInputs();
+        
+        ball.handleInput(timeRate);
+    }
+    
+    setTimeout(updateGame, 16);
+}
+
+function broadcastState() {
+    stateNum += 1;
+    
+    let data = {};
+    
+    data.state_num = stateNum;
+    
+    for (let i = 0; i < balls.length; ++i) {
+        let ball = balls[i];
+        
+        data[ball.id] = {
+            last_input_num: ball.lastInputNum,
+            x: ball.x,
+            y: ball.y,
+        };
+    }
+    
+    io.sockets.emit('update_state', data);
+    
+    setTimeout(broadcastState, 33);
+}
+
+updateGame();
+broadcastState();
 
